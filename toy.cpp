@@ -405,7 +405,10 @@ Value *NumberExprAST::codegen() {
 }
 
 Value *VariableExprAST::codegen() {
-  return nullptr;
+  Value *V = NamedValues[Name];
+  if (!V)
+    return LogErrorV("Unknown variable name");
+  return V;
 }
 
 Value *BinaryExprAST::codegen() {
@@ -431,7 +434,23 @@ Value *BinaryExprAST::codegen() {
 }
 
 Value *CallExprAST::codegen() {
-  return nullptr;
+  // Look up the name in the global module table.
+  Function *CalleeF = TheModule->getFunction(Callee);
+  if (!CalleeF)
+    return LogErrorV("Unknown function references");
+
+  // If argument mismatch error
+  if (CalleeF->arg_size() != Args.size())
+    return LogErrorV("Incorrect # arguments passed");
+
+  std::vector<Value *> ArgsV;
+  for (unsigned int i = 0, e = Args.size(); i != e; ++i) {
+    ArgsV.push_back(Args[i]->codegen());
+    if (!ArgsV.back())
+      return nullptr;
+  }
+
+  return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
 }
 
 Function *PrototypeAST::codegen() {
@@ -490,8 +509,12 @@ Function *FunctionAST::codegen() {
 //===----------------------------------------------------------------------===//
 
 static void HandleDefinition() {
-  if (ParseDefinition()) {
-    fprintf(stderr, "Parsed a function definition.\n");
+  if (auto FnAST = ParseDefinition()) {
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stderr, "Parsed a function definition.\n");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -510,8 +533,8 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
-    if (auto FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read top-level expr");
+    if (auto *FnIR = FnAST->codegen()) {
+      fprintf(stderr, "Read top-level expression:\n");
       FnIR->print(errs());
       fprintf(stderr, "\n");
     }
