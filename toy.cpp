@@ -427,7 +427,7 @@ Value *BinaryExprAST::codegen() {
   case '<':
     L = Builder.CreateFCmpULT(L, R, "cmptmp");
     // Convert bool 0/1 to double 0.0 or 1.0
-    L = Builder.CreateUIToFP(L, Type::getDoubleTy(TheContext), "booltmp");
+    return Builder.CreateUIToFP(L, Type::getDoubleTy(TheContext), "booltmp");
   default:
     return LogErrorV("invalid binary operator");
   }
@@ -505,13 +505,13 @@ Function *FunctionAST::codegen() {
 }
 
 //===----------------------------------------------------------------------===//
-// Top-Level parsing
+// Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
 
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
     if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Parsed a function definition.\n");
+      fprintf(stderr, "Read function definition.\n");
       FnIR->print(errs());
       fprintf(stderr, "\n");
     }
@@ -522,10 +522,14 @@ static void HandleDefinition() {
 }
 
 static void HandleExtern() {
-  if (ParseExtern()) {
-    fprintf(stderr, "Parsed an extern\n");
+  if (auto ProtoAST = ParseExtern()) {
+    if (auto *FnIR = ProtoAST->codegen()) {
+      fprintf(stderr, "Read extern:\n");
+      FnIR->print(errs());
+      fprintf(stderr, "\n");
+    }
   } else {
-    // Skip roken for error recovery.
+    // Skip token for error recovery.
     getNextToken();
   }
 }
