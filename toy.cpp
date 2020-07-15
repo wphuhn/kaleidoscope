@@ -18,7 +18,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 // The lexer returns tokens [0-255] if it is an unknown character, otherwise one
-/// of these for known things.
+// of these for known things.
 enum Token {
   tok_eof = -1,
 
@@ -38,7 +38,7 @@ static double NumVal;             // Filled in if tok_number
 static int gettok() {
   static int LastChar = ' ';
 
-  /// Skip any whitespace.
+  // Skip any whitespace.
   while (isspace(LastChar))
     LastChar = getchar();
 
@@ -160,7 +160,7 @@ public:
   const std::string &getName() const { return Name; }
 };
 
-// FunctionAST - This class represents a function definition itself.
+/// FunctionAST - This class represents a function definition itself.
 class FunctionAST {
   std::unique_ptr<PrototypeAST> Proto;
   std::unique_ptr<ExprAST> Body;
@@ -183,7 +183,7 @@ public:
 /// token the parser is looking at.  getNextToken reads another token from the
 /// lexer and updates CurTok with its results.
 static int CurTok;
-static int getNextToken() { return CurTok = gettok(); };
+static int getNextToken() { return CurTok = gettok(); }
 
 /// BinopPrecedence - This holds the precedence for each binary operator that is
 /// defined.
@@ -194,17 +194,19 @@ static int GetTokPrecedence() {
   if (!isascii(CurTok))
     return -1;
 
+  // Make sure it's a declared binop.
   int TokPrec = BinopPrecedence[CurTok];
   if (TokPrec <= 0)
     return -1;
   return TokPrec;
 }
 
-/// LogError* - These are little help functions for error handling.
+/// LogError* - These are little helper functions for error handling.
 std::unique_ptr<ExprAST> LogError(const char *Str) {
   fprintf(stderr, "Error: %s\n", Str);
   return nullptr;
 }
+
 std::unique_ptr<PrototypeAST> LogErrorP(const char *Str) {
   LogError(Str);
   return nullptr;
@@ -215,7 +217,7 @@ static std::unique_ptr<ExprAST> ParseExpression();
 /// numberexpr ::= number
 static std::unique_ptr<ExprAST> ParseNumberExpr() {
   auto Result = std::make_unique<NumberExprAST>(NumVal);
-  getNextToken(); //consume the number
+  getNextToken(); // consume the number
   return std::move(Result);
 }
 
@@ -241,7 +243,7 @@ static std::unique_ptr<ExprAST> ParseIdentifierExpr() {
   getNextToken(); // eat identifier.
 
   if (CurTok != '(') // Simple variable ref.
-     return std::make_unique<VariableExprAST>(IdName);
+    return std::make_unique<VariableExprAST>(IdName);
 
   // Call.
   getNextToken(); // eat (
@@ -286,7 +288,7 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
 }
 
 /// binoprhs
-///    ::= ('+' primary)*
+///   ::= ('+' primary)*
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
                                               std::unique_ptr<ExprAST> LHS) {
   // If this is a binop, find its precedence.
@@ -307,7 +309,7 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     if (!RHS)
       return nullptr;
 
-    // If BinOp binds less tightly with RHS that the operator after RHS, let
+    // If BinOp binds less tightly with RHS than the operator after RHS, let
     // the pending operator take RHS as its LHS.
     int NextPrec = GetTokPrecedence();
     if (TokPrec < NextPrec) {
@@ -317,8 +319,8 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     }
 
     // Merge LHS/RHS.
-    LHS = std::make_unique<BinaryExprAST>(BinOp, std::move(LHS),
-                                          std::move(RHS));
+    LHS =
+        std::make_unique<BinaryExprAST>(BinOp, std::move(LHS), std::move(RHS));
   }
 }
 
@@ -352,7 +354,7 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
     return LogErrorP("Expected ')' in prototype");
 
   // success.
-  getNextToken(); // eat ')'
+  getNextToken(); // eat ')'.
 
   return std::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
 }
@@ -374,13 +376,13 @@ static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
     auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
-                                                std::vector<std::string>());
+                                                 std::vector<std::string>());
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
   return nullptr;
 }
 
-/// external ::= "extern" prototype
+/// external ::= 'extern' prototype
 static std::unique_ptr<PrototypeAST> ParseExtern() {
   getNextToken(); // eat extern.
   return ParsePrototype();
@@ -405,6 +407,7 @@ Value *NumberExprAST::codegen() {
 }
 
 Value *VariableExprAST::codegen() {
+  // Look this variable up in the function.
   Value *V = NamedValues[Name];
   if (!V)
     return LogErrorV("Unknown variable name");
@@ -437,14 +440,14 @@ Value *CallExprAST::codegen() {
   // Look up the name in the global module table.
   Function *CalleeF = TheModule->getFunction(Callee);
   if (!CalleeF)
-    return LogErrorV("Unknown function references");
+    return LogErrorV("Unknown function referenced");
 
-  // If argument mismatch error
+  // If argument mismatch error.
   if (CalleeF->arg_size() != Args.size())
     return LogErrorV("Incorrect # arguments passed");
 
   std::vector<Value *> ArgsV;
-  for (unsigned int i = 0, e = Args.size(); i != e; ++i) {
+  for (unsigned i = 0, e = Args.size(); i != e; ++i) {
     ArgsV.push_back(Args[i]->codegen());
     if (!ArgsV.back())
       return nullptr;
@@ -454,7 +457,7 @@ Value *CallExprAST::codegen() {
 }
 
 Function *PrototypeAST::codegen() {
-  // Make the function type: double(double,double) etc.
+  // Make the function type:  double(double,double) etc.
   std::vector<Type *> Doubles(Args.size(), Type::getDoubleTy(TheContext));
   FunctionType *FT =
       FunctionType::get(Type::getDoubleTy(TheContext), Doubles, false);
@@ -462,7 +465,7 @@ Function *PrototypeAST::codegen() {
   Function *F =
       Function::Create(FT, Function::ExternalLinkage, Name, TheModule.get());
 
-  // Set names for all arguments
+  // Set names for all arguments.
   unsigned Idx = 0;
   for (auto &Arg : F->args())
     Arg.setName(Args[Idx++]);
@@ -471,7 +474,7 @@ Function *PrototypeAST::codegen() {
 }
 
 Function *FunctionAST::codegen() {
-  // First, check for an existing function from a previous 'extern' declaration
+  // First, check for an existing function from a previous 'extern' declaration.
   Function *TheFunction = TheModule->getFunction(Proto->getName());
 
   if (!TheFunction)
@@ -480,7 +483,7 @@ Function *FunctionAST::codegen() {
   if (!TheFunction)
     return nullptr;
 
-  // Create a new basic block to start insertion into
+  // Create a new basic block to start insertion into.
   BasicBlock *BB = BasicBlock::Create(TheContext, "entry", TheFunction);
   Builder.SetInsertPoint(BB);
 
@@ -490,7 +493,7 @@ Function *FunctionAST::codegen() {
     NamedValues[Arg.getName()] = &Arg;
 
   if (Value *RetVal = Body->codegen()) {
-    // Finish off the function
+    // Finish off the function.
     Builder.CreateRet(RetVal);
 
     // Validate the generated code, checking for consistency.
@@ -511,7 +514,7 @@ Function *FunctionAST::codegen() {
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
     if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read function definition.\n");
+      fprintf(stderr, "Read function definition:\n");
       FnIR->print(errs());
       fprintf(stderr, "\n");
     }
