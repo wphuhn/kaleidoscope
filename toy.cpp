@@ -1,8 +1,12 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include "llvm/Transforms/InstCombine/InstCombine.h"
+#include "llvm/Transforms/Scalar.h"
+#include "llvm/Transforms/Scalar/GVN.h"
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -395,6 +399,7 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 static LLVMContext TheContext;
 static IRBuilder<> Builder(TheContext);
 static std::unique_ptr<Module> TheModule;
+static std::unique_ptr<legacy::FunctionPassManager> TheFPM;
 static std::map<std::string, Value *> NamedValues;
 
 Value *LogErrorV(const char *Str) {
@@ -499,6 +504,8 @@ Function *FunctionAST::codegen() {
     // Validate the generated code, checking for consistency.
     verifyFunction(*TheFunction);
 
+    TheFPM->run(*TheFunction);
+
     return TheFunction;
   }
 
@@ -510,6 +517,25 @@ Function *FunctionAST::codegen() {
 //===----------------------------------------------------------------------===//
 // Top-Level parsing and JIT Driver
 //===----------------------------------------------------------------------===//
+
+void InitializeModuleAndPassManager(void) {
+  // Open a new module.
+  TheModule = std::make_unique<Module>("my cool jit", TheContext);
+
+  // Create a new pass manager attached to it.
+  TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
+
+  // Do simple "peephole" optimizations and bit-twiddling optimizations.
+  TheFPM->add(createInstructionCombiningPass());
+  // Reassociate expressions.
+  TheFPM->add(createReassociatePass());
+  // Eliminate common subexpressions.
+  TheFPM->add(createGVNPass());
+  // Simplify the control flow graph (deleting unreachable blocks, etc.)
+  TheFPM->add(createCFGSimplificationPass());
+
+  TheFPM->doInitialization();
+}
 
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
@@ -592,6 +618,8 @@ int main() {
 
   // Make the module, which holds all the code.
   TheModule = std::make_unique<Module>("my cool jit", TheContext);
+
+  InitializeModuleAndPassManager();
 
   // Run the main "interpreter loop" now.
   MainLoop();
