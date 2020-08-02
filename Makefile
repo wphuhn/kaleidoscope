@@ -4,7 +4,7 @@ CXXFLAGS=-g -O0
 
 all:
 	$(CLANG) $(CXXFLAGS) -c toy.cpp -o toy.o -Iinclude/ `$(LLVM_CONFIG) --cxxflags`
-	$(CLANG) $(CXXFLAGS)  toy.o -o toy `$(LLVM_CONFIG) --ldflags --libs`
+	$(CLANG) $(CXXFLAGS)  toy.o -o toy `$(LLVM_CONFIG) --ldflags --libs` -rdynamic
 
 clean:
 	rm -f toy.o toy
