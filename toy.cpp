@@ -163,6 +163,18 @@ public:
   Value *codegen() override;
 };
 
+/// IfExprAST - Expression class for if/then/else.
+class IfExprAST : public ExprAST {
+  std::unique_ptr<ExprAST> Cond, Then, Else;
+
+public:
+  IfExprAST(std::unique_ptr<ExprAST> Cond, std::unique_ptr<ExprAST> Then,
+            std::unique_ptr<ExprAST> Else)
+    : Cond(std::move(Cond)), Then(std::move(Then)), Else(std::move(Else)) {}
+
+  Value *codegen() override;
+};
+
 /// PrototypeAST - This class represents the "prototype" for a function,
 /// which captures its name, and its argument names (thus implicitly the number
 /// of arguments the function takes).
@@ -312,7 +324,8 @@ static std::unique_ptr<ExprAST> ParseIfExpr() {
   if (!Else)
     return nullptr;
 
-  return nullptr;
+  return std::make_unique<IfExprAST>(std::move(Cond), std::move(Then),
+		                      std::move(Else));
 }
 
 /// primary
@@ -519,6 +532,60 @@ Value *CallExprAST::codegen() {
   }
 
   return Builder.CreateCall(CalleeF, ArgsV, "calltmp");
+}
+
+Value *IfExprAST::codegen() {
+  Value *CondV = Cond->codegen();
+  if (!CondV)
+    return nullptr;
+
+  // Convert condition to a bool by comparing non-equal to 0.0.
+  CondV = Builder.CreateFCmpONE(
+      CondV, ConstantFP::get(TheContext, APFloat(0.0)), "ifcond");
+
+  Function *TheFunction = Builder.GetInsertBlock()->getParent();
+
+  // Create blocks for then and else cases.  Insert the 'then' block at the
+  // end of the function.
+  BasicBlock *ThenBB =
+      BasicBlock::Create(TheContext, "then", TheFunction);
+  BasicBlock *ElseBB = BasicBlock::Create(TheContext, "else");
+  BasicBlock *MergeBB = BasicBlock::Create(TheContext, "ifcont");
+
+  Builder.CreateCondBr(CondV, ThenBB, ElseBB);
+
+  // Emit then value.
+  Builder.SetInsertPoint(ThenBB);
+
+  Value *ThenV = Then->codegen();
+  if (!ThenV)
+    return nullptr;
+
+  Builder.CreateBr(MergeBB);
+  // Codegen of 'Then' can change the current block, update ThenBB for the PHI.
+  ThenBB = Builder.GetInsertBlock();
+
+  // Emit else block.
+  TheFunction->getBasicBlockList().push_back(ElseBB);
+  Builder.SetInsertPoint(ElseBB);
+
+  Value *ElseV = Else->codegen();
+  if (!ElseV)
+    return nullptr;
+
+  Builder.CreateBr(MergeBB);
+  // codegen of 'Else' can change the current block, update ElseBB for the PHI.
+  ElseBB = Builder.GetInsertBlock();
+
+  // Emit merge block.
+  TheFunction->getBasicBlockList().push_back(MergeBB);
+  Builder.SetInsertPoint(MergeBB);
+  PHINode *PN =
+    Builder.CreatePHI(Type::getDoubleTy(TheContext), 2, "iftmp");
+
+  PN->addIncoming(ThenV, ThenBB);
+  PN->addIncoming(ElseV, ElseBB);
+  return PN;
 }
 
 Function *PrototypeAST::codegen() {
