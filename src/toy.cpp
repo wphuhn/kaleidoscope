@@ -1,4 +1,4 @@
-#include "include/KaleidoscopeJIT.h"
+#include "KaleidoscopeJIT.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
