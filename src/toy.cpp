@@ -151,6 +151,18 @@ public:
   Value *codegen() override;
 };
 
+/// UnaryExprAST - Expression class for a unary operator.
+class UnaryExprAST : public ExprAST {
+  char Opcode;
+  std::unique_ptr<ExprAST> Operand;
+
+public:
+  UnaryExprAST(char Opcode, std::unique_ptr<ExprAST> Operand)
+      : Opcode(Opcode), Operand(std::move(Operand)) {}
+
+  Value *codegen() override;
+};
+
 /// BinaryExprAST - Expression class for a binary operator.
 class BinaryExprAST : public ExprAST {
   char Op;
@@ -440,7 +452,7 @@ std::unique_ptr<ExprAST> ParseUnary() {
   int Opc = CurTok;
   getNextToken();
   if (auto Operand = ParseUnary())
-    return nullptr;
+    return std::make_unique<UnaryExprAST>(Opc, std::move(Operand));
   return nullptr;
 }
 
@@ -626,6 +638,18 @@ Value *VariableExprAST::codegen() {
   if (!V)
     return LogErrorV("Unknown variable name");
   return V;
+}
+
+Value *UnaryExprAST::codegen() {
+  Value *OperandV = Operand->codegen();
+  if (!OperandV)
+    return nullptr;
+
+  Function *F = getFunction(std::string("unary") + Opcode);
+  if (!F)
+    return LogErrorV("Unknown unary operator");
+
+  return Builder.CreateCall(F, OperandV, "unop");
 }
 
 Value *BinaryExprAST::codegen() {
