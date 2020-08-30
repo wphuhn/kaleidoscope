@@ -42,7 +42,11 @@ enum Token {
   tok_then = -7,
   tok_else = -8,
   tok_for = -9,
-  tok_in = -10
+  tok_in = -10,
+
+  // operators
+  tok_binary = -11,
+  tok_unary = -12
 };
 
 static std::string IdentifierStr; // Filled in if tok_identifier
@@ -75,6 +79,10 @@ static int gettok() {
       return tok_for;
     if (IdentifierStr == "in")
       return tok_in;
+    if (IdentifierStr == "binary")
+      return tok_binary;
+    if (IdentifierStr == "unary")
+      return tok_unary;
     return tok_identifier;
   }
 
@@ -420,6 +428,22 @@ static std::unique_ptr<ExprAST> ParsePrimary() {
   }
 }
 
+/// unary
+///   ::=primary
+///   ::='!' unary
+std::unique_ptr<ExprAST> ParseUnary() {
+  // If the current token is not an operator, it must be a primary expr.
+  if (!isascii(CurTok) || CurTok == '(' || CurTok == ',')
+    return ParsePrimary();
+
+  // if this is a unary operator, read it.
+  int Opc = CurTok;
+  getNextToken();
+  if (auto Operand = ParseUnary())
+    return nullptr;
+  return nullptr;
+}
+
 /// binoprhs
 ///   ::= ('+' primary)*
 static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
@@ -437,8 +461,8 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
     int BinOp = CurTok;
     getNextToken(); // eat binop
 
-    // Parse the primary expression after the binary operator.
-    auto RHS = ParsePrimary();
+    // Parse the unary expression after the binary operator.
+    auto RHS = ParseUnary();
     if (!RHS)
       return nullptr;
 
@@ -458,10 +482,10 @@ static std::unique_ptr<ExprAST> ParseBinOpRHS(int ExprPrec,
 }
 
 /// expression
-///   ::= primary binoprhs
+///   ::= unary binoprhs
 ///
 static std::unique_ptr<ExprAST> ParseExpression() {
-  auto LHS = ParsePrimary();
+  auto LHS = ParseUnary();
   if (!LHS)
     return nullptr;
 
@@ -471,11 +495,46 @@ static std::unique_ptr<ExprAST> ParseExpression() {
 /// prototype
 ///   ::= id '(' id* ')'
 static std::unique_ptr<PrototypeAST> ParsePrototype() {
-  if (CurTok != tok_identifier)
-    return LogErrorP("Expected function name in prototype");
+  std::string FnName;
 
-  std::string FnName = IdentifierStr;
-  getNextToken();
+  unsigned Kind = 0; // 0 = identifier, 1 = unary, 2 = binary
+  unsigned BinaryPrecedence = 0;
+
+  switch (CurTok) {
+    default:
+      return LogErrorP("Expected function name in prototype");
+    case tok_identifier:
+      FnName = IdentifierStr;
+      Kind = 0;
+      getNextToken();
+      break;
+    case tok_unary:
+      getNextToken();
+      if (!isascii(CurTok))
+        return LogErrorP("Expected unary operator");
+      FnName += "unary";
+      FnName += (char)CurTok;
+      Kind = 1;
+      getNextToken();
+      break;
+    case tok_binary:
+      getNextToken();
+      if (!isascii(CurTok))
+        return LogErrorP("Expected binary operator");
+      FnName += "binary";
+      FnName += (char)CurTok;
+      Kind = 2;
+      getNextToken();
+
+      // Read the precedence if present.
+      if (CurTok == tok_number) {
+        if (NumVal < 1 || NumVal > 100)
+          return LogErrorP("Invalid precedence: must be 1..100");
+        BinaryPrecedence = (unsigned)NumVal;
+        getNextToken();
+      }
+      break;
+  }
 
   if (CurTok != '(')
     return LogErrorP("Expected '(' in prototype");
@@ -488,6 +547,10 @@ static std::unique_ptr<PrototypeAST> ParsePrototype() {
 
   // success.
   getNextToken(); // eat ')'.
+
+  // Verify right number of names for operator.
+  if (Kind && ArgNames.size() != Kind)
+    return LogErrorP("Invalid number of operands for operator");
 
   return std::make_unique<PrototypeAST>(FnName, std::move(ArgNames));
 }
