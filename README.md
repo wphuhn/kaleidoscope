@@ -6,6 +6,7 @@ Working through LLVM tutorial
 
 * LLVM 10.0.1
 * Clang 10.0.1
+* CMake 3.16
 
 # Note
 
@@ -17,7 +18,8 @@ Working through LLVM tutorial
 
 # Installation
 
-* `make`
+* `mkdir build && cd build`
+* `cmake .. && make`
 
 # To-Do
 
