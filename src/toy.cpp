@@ -1,11 +1,11 @@
 #include "KaleidoscopeJIT.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
+#include <llvm/Support/FileSystem.h>
 #include "llvm/Support/Host.h"
 #include <llvm/Support/TargetRegistry.h>
 #include "llvm/Support/TargetSelect.h"
@@ -696,7 +696,6 @@ static IRBuilder<> Builder(TheContext);
 static std::unique_ptr<Module> TheModule;
 static std::map<std::string, AllocaInst *> NamedValues;
 static std::unique_ptr<legacy::FunctionPassManager> TheFPM;
-static std::unique_ptr<KaleidoscopeJIT> TheJIT;
 static std::map<std::string, std::unique_ptr<PrototypeAST>> FunctionProtos;
 
 Value *LogErrorV(const char *Str) {
@@ -1102,7 +1101,6 @@ Function *FunctionAST::codegen() {
 static void InitializeModuleAndPassManager() {
   // Open a new module.
   TheModule = std::make_unique<Module>("my cool jit", TheContext);
-  TheModule->setDataLayout(TheJIT->getTargetMachine().createDataLayout());
 
   // Create a new pass manager attached to it.
   TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
@@ -1127,8 +1125,6 @@ static void HandleDefinition() {
       fprintf(stderr, "Read function definition:\n");
       FnIR->print(errs());
       fprintf(stderr, "\n");
-      TheJIT->addModule(std::move(TheModule));
-      InitializeModuleAndPassManager();
     }
   } else {
     // Skip token for error recovery.
@@ -1153,28 +1149,7 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
-    if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read top-level expression:\n");
-      FnIR->print(errs());
-      fprintf(stderr, "\n");
-
-      // JIT the module containing the anonymous expression, keeping a handle so
-      // we can free it later.
-      auto H = TheJIT->addModule(std::move(TheModule));
-      InitializeModuleAndPassManager();
-
-      // Search the JIT for the __anon_expr symbol.
-      auto ExprSymbol = TheJIT->findSymbol("__anon_expr");
-      assert(ExprSymbol && "Function not found");
-
-      // Get the symbol's address and cast it to the right type (takes no
-      // arguments, returns a double) so we can call it as a native function.
-      double (*FP)() = (double (*)())(intptr_t)cantFail(ExprSymbol.getAddress());
-      fprintf(stderr, "Evaluated to %f\n", FP());
-
-      // Delete the anonymous expression module from the JIT.
-      TheJIT->removeModule(H);
-    }
+    FnAST->codegen();
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -1231,13 +1206,32 @@ extern "C" DLLEXPORT double printd(double X) {
 //===----------------------------------------------------------------------===//
 
 int main() {
-  auto TargetTriple = sys::getDefaultTargetTriple();
+  // Install standard binary operators.
+  // 1 is lowest precedence.
+  BinopPrecedence['='] = 2;
+  BinopPrecedence['<'] = 10;
+  BinopPrecedence['+'] = 20;
+  BinopPrecedence['-'] = 20;
+  BinopPrecedence['*'] = 40; // highest.
 
+  // Prime the first token.
+  fprintf(stderr, "ready> ");
+  getNextToken();
+
+  InitializeModuleAndPassManager();
+
+  // Run the main "interpreter loop" now.
+  MainLoop();
+
+  // Initialize the target registry etc.
   InitializeAllTargetInfos();
   InitializeAllTargets();
   InitializeAllTargetMCs();
   InitializeAllAsmParsers();
   InitializeAllAsmPrinters();
+
+  auto TargetTriple = sys::getDefaultTargetTriple();
+  TheModule->setTargetTriple(TargetTriple);
 
   std::string Error;
   auto Target = TargetRegistry::lookupTarget(TargetTriple, Error);
@@ -1255,31 +1249,33 @@ int main() {
 
   TargetOptions opt;
   auto RM = Optional<Reloc::Model>();
-  auto TargetMachine = Target->createTargetMachine(TargetTriple, CPU, Features, opt , RM);
+  auto TheTargetMachine =
+      Target->createTargetMachine(TargetTriple, CPU, Features, opt, RM);
 
-  // Install standard binary operators.
-  // 1 is lowest precedence.
-  BinopPrecedence['='] = 2;
-  BinopPrecedence['<'] = 10;
-  BinopPrecedence['+'] = 20;
-  BinopPrecedence['-'] = 20;
-  BinopPrecedence['*'] = 40; // highest.
+  TheModule->setDataLayout(TheTargetMachine->createDataLayout());
 
-  // Prime the first token.
-  fprintf(stderr, "ready> ");
-  getNextToken();
+  auto FileName = "output.o";
+  std::error_code EC;
+  raw_fd_ostream dest(FileName, EC, sys::fs::OF_None);
 
-  TheJIT = std::make_unique<KaleidoscopeJIT>();
+  if (EC) {
+    errs() << "Could not open file: " << EC.message();
+    return 1;
+  }
 
-  InitializeModuleAndPassManager();
+  legacy::PassManager pass;
+  auto FileType = CGFT_ObjectFile;
 
-  // Run the main "interpreter loop" now.
-  MainLoop();
+  if (TheTargetMachine->addPassesToEmitFile(pass, dest, nullptr, FileType)) {
+    errs() << "TheTargetMachine can't emit a file of this type";
+    return 1;
+  }
 
-  // Print out all of the generated code.
-  TheModule->print(errs(), nullptr);
+  pass.run(*TheModule);
+  dest.flush();
+
+  outs() << "Wrote " << FileName << "\n";
 
   return 0;
 }
-
 
