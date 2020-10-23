@@ -19,6 +19,6 @@ set(SOURCE_FILES src/toy.cpp)
 
 add_executable(toy ${SOURCE_FILES})
 
-llvm_map_components_to_libnames(llvm_libs orcjit x86asmparser x86codegen)
+llvm_map_components_to_libnames(llvm_libs orcjit ${LLVM_TARGETS_TO_BUILD})
 
 target_link_libraries(toy ${llvm_libs})
