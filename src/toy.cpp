@@ -2,6 +2,7 @@
 #include "llvm/ADT/Optional.h"
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/DIBuilder.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Module.h"
 #include "llvm/IR/Verifier.h"
@@ -688,6 +689,40 @@ static std::unique_ptr<PrototypeAST> ParseExtern() {
 }
 
 //===----------------------------------------------------------------------===//
+// Debug Info Support
+//===----------------------------------------------------------------------===//
+
+static std::unique_ptr<DIBuilder> DBuilder;
+
+struct DebugInfo {
+  DICompileUnit *TheCU;
+  DIType *DblTy;
+
+  DIType *getDoubleTy();
+} KSDbgInfo;
+
+DIType *DebugInfo::getDoubleTy() {
+  if (DblTy)
+    return DblTy;
+
+  DblTy = DBuilder->createBasicType("double", 64, dwarf::DW_ATE_float);
+  return DblTy;
+}
+
+static DISubroutineType *CreateFunctionType(unsigned NumArgs, DIFile *Unit) {
+  SmallVector<Metadata *, 8> EltTys;
+  DIType *DblTy = KSDbgInfo.getDoubleTy();
+
+  // Add the result type.
+  EltTys.push_back(DblTy);
+
+  for (unsigned i = 0, e = NumArgs; i != e; ++i)
+    EltTys.push_back(DblTy);
+
+  return DBuilder->createSubroutineType(DBuilder->getOrCreateTypeArray(EltTys));
+}
+
+//===----------------------------------------------------------------------===//
 // Code Generation
 //===----------------------------------------------------------------------===//
 
@@ -1060,6 +1095,17 @@ Function *FunctionAST::codegen() {
   BasicBlock *BB = BasicBlock::Create(TheContext, "entry", TheFunction);
   Builder.SetInsertPoint(BB);
 
+  DIFile *Unit = DBuilder->createFile(KSDbgInfo.TheCU->getFilename(),
+                                      KSDbgInfo.TheCU->getDirectory());
+  DIScope *FContext = Unit;
+  unsigned LineNo = 0;
+  unsigned ScopeLine = 0;
+  DISubprogram *SP = DBuilder->createFunction(
+      FContext, P.getName(), StringRef(), Unit, LineNo,
+      CreateFunctionType(TheFunction->arg_size(), Unit), ScopeLine,
+      DINode::FlagPrototyped, DISubprogram::SPFlagDefinition);
+  TheFunction->setSubprogram(SP);
+
   // Record the function arguments in the NamedValues map.
   NamedValues.clear();
   for (auto &Arg : TheFunction->args()) {
@@ -1217,6 +1263,16 @@ int main() {
 
   InitializeModuleAndPassManager();
 
+  // Construct the DIBuilder, we do this here because we need the module.
+  DBuilder = std::make_unique<DIBuilder>(*TheModule);
+
+  // Create the compile unit for the module.
+  // Currently down as "fib.ks" as a filename since we're redirecting stdin
+  // but we'd like actual source locations.
+  KSDbgInfo.TheCU = DBuilder->createCompileUnit(
+      dwarf::DW_LANG_C, DBuilder->createFile("fib.ks", "."),
+      "Kaleidoscope Compiler", 0, "", 0);
+
   // Run the main "interpreter loop" now.
   MainLoop();
 
@@ -1268,6 +1324,10 @@ int main() {
     return 1;
   }
 
+  // Finalize the debug info.
+  DBuilder->finalize();
+
+  // Print out all of the generated code.
   TheModule->print(errs(), nullptr);
 
   pass.run(*TheModule);
