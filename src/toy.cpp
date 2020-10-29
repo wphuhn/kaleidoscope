@@ -674,7 +674,7 @@ static std::unique_ptr<FunctionAST> ParseDefinition() {
 static std::unique_ptr<FunctionAST> ParseTopLevelExpr() {
   if (auto E = ParseExpression()) {
     // Make an anonymous proto.
-    auto Proto = std::make_unique<PrototypeAST>("__anon_expr",
+    auto Proto = std::make_unique<PrototypeAST>("main",
                                                  std::vector<std::string>());
     return std::make_unique<FunctionAST>(std::move(Proto), std::move(E));
   }
@@ -1121,10 +1121,8 @@ static void InitializeModuleAndPassManager() {
 
 static void HandleDefinition() {
   if (auto FnAST = ParseDefinition()) {
-    if (auto *FnIR = FnAST->codegen()) {
-      fprintf(stderr, "Read function definition:\n");
-      FnIR->print(errs());
-      fprintf(stderr, "\n");
+    if (!FnAST->codegen()) {
+      fprintf(stderr, "Error reading function definition:");
     }
   } else {
     // Skip token for error recovery.
@@ -1134,10 +1132,9 @@ static void HandleDefinition() {
 
 static void HandleExtern() {
   if (auto ProtoAST = ParseExtern()) {
-    if (auto *FnIR = ProtoAST->codegen()) {
-      fprintf(stderr, "Read extern:\n");
-      FnIR->print(errs());
-      fprintf(stderr, "\n");
+    if (!ProtoAST->codegen()) {
+      fprintf(stderr, "Error reading extern");
+    } else {
       FunctionProtos[ProtoAST->getName()] = std::move(ProtoAST);
     }
   } else {
@@ -1149,7 +1146,9 @@ static void HandleExtern() {
 static void HandleTopLevelExpression() {
   // Evaluate a top-level expression into an anonymous function.
   if (auto FnAST = ParseTopLevelExpr()) {
-    FnAST->codegen();
+    if (!FnAST->codegen()) {
+      fprintf(stderr, "Error generating code for top level expr");
+    }
   } else {
     // Skip token for error recovery.
     getNextToken();
@@ -1159,7 +1158,6 @@ static void HandleTopLevelExpression() {
 /// top ::= definition | external | expression | ';'
 static void MainLoop() {
   while (true) {
-    fprintf(stderr, "ready> ");
     switch (CurTok) {
     case tok_eof:
       return;
@@ -1215,7 +1213,6 @@ int main() {
   BinopPrecedence['*'] = 40; // highest.
 
   // Prime the first token.
-  fprintf(stderr, "ready> ");
   getNextToken();
 
   InitializeModuleAndPassManager();
@@ -1271,10 +1268,10 @@ int main() {
     return 1;
   }
 
+  TheModule->print(errs(), nullptr);
+
   pass.run(*TheModule);
   dest.flush();
-
-  outs() << "Wrote " << FileName << "\n";
 
   return 0;
 }
