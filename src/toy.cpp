@@ -1223,11 +1223,26 @@ Function *FunctionAST::codegen() {
   // Push the current scope.
   KSDbgInfo.LexicalBlocks.push_back(SP);
 
+  // Unset the location for the prologue emission (leading instructions with no
+  // location in a function are considered part of the prologue and the debugger
+  // will run past them when breaking on a function)
+  KSDbgInfo.emitLocation(nullptr);
+
   // Record the function arguments in the NamedValues map.
   NamedValues.clear();
+  unsigned ArgIdx = 0;
   for (auto &Arg : TheFunction->args()) {
     // Create an alloca for this variable.
     AllocaInst *Alloca = CreateEntryBlockAlloca(TheFunction, Arg.getName());
+
+    // Create a debug descriptor for the variable.
+    DILocalVariable *D = DBuilder->createParameterVariable(
+        SP, Arg.getName(), ++ArgIdx, Unit, LineNo, KSDbgInfo.getDoubleTy(),
+        true);
+
+    DBuilder->insertDeclare(Alloca, D, DBuilder->createExpression(),
+                            DebugLoc::get(LineNo, 0, SP),
+                            Builder.GetInsertBlock());
 
     // Store the initial value into the alloca.
     Builder.CreateStore(&Arg, Alloca);
@@ -1235,6 +1250,8 @@ Function *FunctionAST::codegen() {
     // Add arguments to variable symbol table.
     NamedValues[std::string(Arg.getName())] = Alloca;
   }
+
+  KSDbgInfo.emitLocation(Body.get());
 
   if (Value *RetVal = Body->codegen()) {
     // Finish off the function.
