@@ -1293,6 +1293,7 @@ static void InitializeModuleAndPassManager() {
   // Create a new pass manager attached to it.
   TheFPM = std::make_unique<legacy::FunctionPassManager>(TheModule.get());
 
+#ifndef defined(NO_OPTS)
   // Promote allocas to registers.
   TheFPM->add(createPromoteMemoryToRegisterPass());
   // Do simple "peephole" optimizations and bit-twiddling optzns.
@@ -1303,6 +1304,7 @@ static void InitializeModuleAndPassManager() {
   TheFPM->add(createGVNPass());
   // Simplify the control flow graph (deleting unreachable blocks, etc).
   TheFPM->add(createCFGSimplificationPass());
+#endif
 
   TheFPM->doInitialization();
 }
@@ -1402,6 +1404,14 @@ int main() {
   getNextToken();
 
   InitializeModuleAndPassManager();
+
+  // Add the current debug info version into the module.
+  TheModule->addModuleFlag(Module::Warning, "Debug Info Version",
+                           DEBUG_METADATA_VERSION);
+
+  // Darwin only supports dwarf2.
+  if (Triple(sys::getProcessTriple()).isOSDarwin())
+    TheModule->addModuleFlag(llvm::Module::Warning, "Dwarf Version", 2);
 
   // Construct the DIBuilder, we do this here because we need the module.
   DBuilder = std::make_unique<DIBuilder>(*TheModule);
