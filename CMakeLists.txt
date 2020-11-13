@@ -15,7 +15,14 @@ include_directories(${LLVM_INCLUDE_DIRS})
 add_definitions(${LLVM_DEFINITIONS})
 
 include_directories(include/)
-set(SOURCE_FILES src/toy.cpp)
+set(SOURCE_FILES
+        src/ast.cpp
+        src/debug.cpp
+        src/lexer.cpp
+        src/parser.cpp
+        src/toplevel.cpp
+        src/toy.cpp
+        )
 
 add_executable(toy ${SOURCE_FILES})
 
