@@ -1,11 +1,6 @@
-#include "llvm/IR/DIBuilder.h"
-#include "llvm/IR/Module.h"
-#include <llvm/Support/TargetRegistry.h>
-
-using namespace llvm;
+#include "debug.hpp"
 
 #include "ast.hpp"
-#include "debug.hpp"
 #include "lexer.hpp"
 
 std::unique_ptr<DIBuilder> DBuilder;

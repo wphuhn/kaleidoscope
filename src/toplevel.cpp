@@ -1,22 +1,14 @@
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Module.h"
+#include "toplevel.hpp"
+
 #include "llvm/Transforms/InstCombine/InstCombine.h"
 #include "llvm/Transforms/Scalar.h"
 #include "llvm/Transforms/Scalar/GVN.h"
 #include "llvm/Transforms/Utils.h"
-#include <cstdio>
-#include <memory>
-#include <vector>
-#include "KaleidoscopeJIT.h"
-
-using namespace llvm;
-using namespace llvm::orc;
 
 #include "ast.hpp"
 #include "debug.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
-#include "toplevel.hpp"
 
 std::unique_ptr<Module> TheModule;
 

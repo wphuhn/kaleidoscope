@@ -1,12 +1,7 @@
 #ifndef KALEIDOSCOPE_PARSER_H__
 #define KALEIDOSCOPE_PARSER_H__
 
-#include "KaleidoscopeJIT.h"
-
 #include "ast.hpp"
-
-using namespace llvm;
-using namespace llvm::orc;
 
 //===----------------------------------------------------------------------===//
 // Parser

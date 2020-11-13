@@ -1,12 +1,6 @@
-#include <cctype>
-#include <cstdio>
-#include <string>
-
-#include "ast.hpp"
 #include "lexer.hpp"
 
-using namespace llvm;
-using namespace llvm::orc;
+#include "ast.hpp"
 
 LLVMContext TheContext;
 IRBuilder<> Builder(TheContext);

@@ -2,12 +2,8 @@
 #define KALEIDOSCOPE_LEXER_H__
 
 #include "llvm/IR/IRBuilder.h"
-#include "KaleidoscopeJIT.h"
 
 #include "ast.hpp"
-
-using namespace llvm;
-using namespace llvm::orc;
 
 //===----------------------------------------------------------------------===//
 // Lexer

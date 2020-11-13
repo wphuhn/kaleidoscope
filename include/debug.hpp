@@ -2,12 +2,8 @@
 #define KALEIDOSCOPE_DEBUG_H__
 
 #include "llvm/IR/DIBuilder.h"
-#include "KaleidoscopeJIT.h"
 
 #include "ast.hpp"
-
-using namespace llvm;
-using namespace llvm::orc;
 
 //===----------------------------------------------------------------------===//
 // Debug Info Support

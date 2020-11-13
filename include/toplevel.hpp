@@ -1,10 +1,9 @@
 #ifndef KALEIDOSCOPE_TOPLEVEL_H__
 #define KALEIDOSCOPE_TOPLEVEL_H__
 
-#include "KaleidoscopeJIT.h"
+#include "llvm/IR/Module.h"
 
 using namespace llvm;
-using namespace llvm::orc;
 
 //===----------------------------------------------------------------------===//
 // Top-Level parsing and JIT Driver

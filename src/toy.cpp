@@ -1,18 +1,8 @@
-#include "llvm/ADT/Optional.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/DIBuilder.h"
-#include "llvm/IR/LegacyPassManager.h"
-#include "llvm/IR/Module.h"
-#include <llvm/Support/FileSystem.h>
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
-#include <llvm/Support/TargetRegistry.h>
+#include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
-#include <memory>
-#include <string>
-#include "KaleidoscopeJIT.h"
-
-using namespace llvm;
-using namespace llvm::orc;
+#include "llvm/Target/TargetMachine.h"
 
 #include "debug.hpp"
 #include "lexer.hpp"

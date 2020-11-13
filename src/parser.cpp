@@ -1,14 +1,6 @@
-#include <cctype>
-#include <cstdio>
-#include <memory>
-#include <string>
-#include <vector>
-
-#include "lexer.hpp"
 #include "parser.hpp"
 
-using namespace llvm;
-using namespace llvm::orc;
+#include "lexer.hpp"
 
 int CurTok;
 std::map<char, int> BinopPrecedence;

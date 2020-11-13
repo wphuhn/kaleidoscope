@@ -1,12 +1,11 @@
+#include "ast.hpp"
+
 #include "llvm/IR/Verifier.h"
 
 #include "debug.hpp"
 #include "lexer.hpp"
 #include "parser.hpp"
 #include "toplevel.hpp"
-
-using namespace llvm;
-using namespace llvm::orc;
 
 SourceLocation CurLoc;
 SourceLocation LexLoc = {1, 0};

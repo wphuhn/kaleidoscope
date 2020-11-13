@@ -3,10 +3,8 @@
 
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/LegacyPassManager.h"
-#include "KaleidoscopeJIT.h"
 
 using namespace llvm;
-using namespace llvm::orc;
 
 struct SourceLocation {
   int Line;
